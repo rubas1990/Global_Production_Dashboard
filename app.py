@@ -19,30 +19,34 @@ app.title = "Dashboard Producción Global"
 # 3. Layout del dashboard
 # ============================
 app.layout = html.Div([
-    html.H1("📊 Dashboard Producción Global", style={"textAlign": "center"}),
+    html.H1("🏭 Dashboard de Producción Global", style={"textAlign": "center"}),
 
     # --------------------------
     # Filtros
     # --------------------------
     html.Div([
-        html.Label("Selecciona Planta:"),
-        dcc.Dropdown(
-            id="planta-dropdown",
-            options=[{"label": p, "value": p} for p in df["Planta"].unique()],
-            value=df["Planta"].unique()[0],
-            multi=False
-        ),
+        html.Div([
+            html.Label("Selecciona Planta:"),
+            dcc.Dropdown(
+                id="planta-dropdown",
+                options=[{"label": p, "value": p} for p in df["Planta"].unique()],
+                value=df["Planta"].unique()[0],
+                multi=False
+            )
+        ], style={"width": "45%", "display": "inline-block", "padding": "10px"}),
 
-        html.Label("Rango de Fechas:"),
-        dcc.DatePickerRange(
-            id="fecha-picker",
-            start_date=df["Fecha"].min(),
-            end_date=df["Fecha"].max(),
-            display_format="YYYY-MM-DD"
-        )
-    ], style={"width": "40%", "display": "inline-block", "verticalAlign": "top"}),
+        html.Div([
+            html.Label("Rango de Fechas:"),
+            dcc.DatePickerRange(
+                id="fecha-picker",
+                start_date=df["Fecha"].min(),
+                end_date=df["Fecha"].max(),
+                display_format="YYYY-MM-DD"
+            )
+        ], style={"width": "45%", "display": "inline-block", "padding": "10px"})
+    ], style={"textAlign": "center"}),
 
-    html.Br(),
+    html.Hr(),
 
     # --------------------------
     # KPIs
@@ -53,26 +57,40 @@ app.layout = html.Div([
         "marginTop": "20px"
     }),
 
-    html.Br(),
+    html.Hr(),
 
     # --------------------------
-    # Gráficos
+    # Fila 1 de gráficos
     # --------------------------
     html.Div([
-        dcc.Graph(id="grafico-produccion"),
-        dcc.Graph(id="grafico-defectos")
+        html.Div([dcc.Graph(id="grafico-produccion")],
+                 style={"width": "48%", "display": "inline-block", "padding": "10px"}),
+
+        html.Div([dcc.Graph(id="grafico-defectos")],
+                 style={"width": "48%", "display": "inline-block", "padding": "10px"})
+    ]),
+
+    # --------------------------
+    # Fila 2 de gráficos
+    # --------------------------
+    html.Div([
+        html.Div([dcc.Graph(id="grafico-paros")],
+                 style={"width": "48%", "display": "inline-block", "padding": "10px"}),
+
+        html.Div([dcc.Graph(id="grafico-dispersion")],
+                 style={"width": "48%", "display": "inline-block", "padding": "10px"})
     ])
 ])
 
 # ============================
 # 4. Callbacks
 # ============================
-
-# Filtro + actualización de KPIs y gráficos
 @app.callback(
     [Output("kpi-cards", "children"),
      Output("grafico-produccion", "figure"),
-     Output("grafico-defectos", "figure")],
+     Output("grafico-defectos", "figure"),
+     Output("grafico-paros", "figure"),
+     Output("grafico-dispersion", "figure")],
     [Input("planta-dropdown", "value"),
      Input("fecha-picker", "start_date"),
      Input("fecha-picker", "end_date")]
@@ -89,36 +107,63 @@ def update_dashboard(planta, start_date, end_date):
     total_prod = dff["Produccion"].sum()
     total_def = dff["Defectos"].sum()
     prom_disp = round(dff["Disponibilidad_%"].mean(), 2)
+    
+    # OEE simulado = Disponibilidad * (1 - Defectos/Producción) * 100
+    if total_prod > 0:
+        calidad = 1 - (total_def / total_prod)
+    else:
+        calidad = 0
+    oee = round((prom_disp/100) * calidad * 100, 2)
 
     kpis = [
         html.Div([
-            html.H3("Producción Total"),
-            html.P(f"{total_prod:,}")
-        ], style={"border": "1px solid #ccc", "padding": "10px", "borderRadius": "10px", "width": "25%", "textAlign": "center"}),
+            html.H3("Producción Total", style={"color": "#2E86C1"}),
+            html.H2(f"{total_prod:,}")
+        ], style={"border": "1px solid #ccc", "padding": "15px", "borderRadius": "10px", "width": "22%", "textAlign": "center"}),
 
         html.Div([
-            html.H3("Defectos Totales"),
-            html.P(f"{total_def:,}")
-        ], style={"border": "1px solid #ccc", "padding": "10px", "borderRadius": "10px", "width": "25%", "textAlign": "center"}),
+            html.H3("Defectos Totales", style={"color": "#C0392B"}),
+            html.H2(f"{total_def:,}")
+        ], style={"border": "1px solid #ccc", "padding": "15px", "borderRadius": "10px", "width": "22%", "textAlign": "center"}),
 
         html.Div([
-            html.H3("Disponibilidad Promedio"),
-            html.P(f"{prom_disp}%")
-        ], style={"border": "1px solid #ccc", "padding": "10px", "borderRadius": "10px", "width": "25%", "textAlign": "center"})
+            html.H3("Disponibilidad Promedio", style={"color": "#27AE60"}),
+            html.H2(f"{prom_disp}%")
+        ], style={"border": "1px solid #ccc", "padding": "15px", "borderRadius": "10px", "width": "22%", "textAlign": "center"}),
+
+        html.Div([
+            html.H3("OEE (simulado)", style={"color": "#8E44AD"}),
+            html.H2(f"{oee}%")
+        ], style={"border": "1px solid #ccc", "padding": "15px", "borderRadius": "10px", "width": "22%", "textAlign": "center"})
     ]
 
     # ============================
-    # Gráfico de Producción
+    # Gráfico Producción (línea)
     # ============================
-    fig_prod = px.line(dff, x="Fecha", y="Produccion", title=f"Producción - {planta}")
-    fig_prod.update_traces(mode="lines+markers")
+    fig_prod = px.line(dff, x="Fecha", y="Produccion",
+                       title=f"Producción en el tiempo - {planta}",
+                       markers=True)
 
     # ============================
-    # Gráfico de Defectos
+    # Gráfico Defectos (barras)
     # ============================
-    fig_def = px.bar(dff, x="Fecha", y="Defectos", title=f"Defectos - {planta}")
+    fig_def = px.bar(dff, x="Fecha", y="Defectos",
+                     title=f"Defectos en el tiempo - {planta}")
 
-    return kpis, fig_prod, fig_def
+    # ============================
+    # Gráfico Paros (boxplot)
+    # ============================
+    fig_paros = px.box(dff, y="Paros_min",
+                       title=f"Distribución de Paros (min) - {planta}")
+
+    # ============================
+    # Gráfico Disponibilidad vs Producción (scatter)
+    # ============================
+    fig_disp = px.scatter(dff, x="Produccion", y="Disponibilidad_%", size="Defectos",
+                          title=f"Disponibilidad vs Producción - {planta}",
+                          hover_data=["Turno"])
+
+    return kpis, fig_prod, fig_def, fig_paros, fig_disp
 
 
 # ============================
