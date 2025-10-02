@@ -51,9 +51,6 @@ Industry 4.0 Applications: Simulating digital factory dashboards for smart manuf
 
 ⚡ How to Use
 
-Clone the repository:
-
-git clone https://github.com/yourusername/Global_Production_Dashboard.git
 
 
 Install dependencies:
