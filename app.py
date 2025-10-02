@@ -1,52 +1,128 @@
 import pandas as pd
-from dash import Dash, dcc, html
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
 import plotly.express as px
 
-# Leer dataset
-df = pd.read_csv("data/production_data.csv", parse_dates=["timestamp"])
+# ============================
+# 1. Cargar datos
+# ============================
+df = pd.read_csv("datos_produccion.csv", parse_dates=["Fecha"])
 
-# Crear app Dash
-app = Dash(__name__)
-app.title = "Global Production Dashboard"
+# ============================
+# 2. Inicializar la app
+# ============================
+app = dash.Dash(__name__)
+app.title = "Dashboard Producción Global"
 
-# Layout del dashboard
+# ============================
+# 3. Layout del dashboard
+# ============================
 app.layout = html.Div([
-    html.H1("Global Production Dashboard", style={'textAlign':'center'}),
-    
+    html.H1("📊 Dashboard Producción Global", style={"textAlign": "center"}),
+
+    # --------------------------
+    # Filtros
+    # --------------------------
     html.Div([
         html.Label("Selecciona Planta:"),
         dcc.Dropdown(
-            id='plant-dropdown',
-            options=[{'label': p, 'value': p} for p in df['plant_id'].unique()],
-            value='Plant_A'
+            id="planta-dropdown",
+            options=[{"label": p, "value": p} for p in df["Planta"].unique()],
+            value=df["Planta"].unique()[0],
+            multi=False
+        ),
+
+        html.Label("Rango de Fechas:"),
+        dcc.DatePickerRange(
+            id="fecha-picker",
+            start_date=df["Fecha"].min(),
+            end_date=df["Fecha"].max(),
+            display_format="YYYY-MM-DD"
         )
-    ], style={'width':'30%', 'margin':'auto'}),
-    
-    dcc.Graph(id='units-graph'),
-    dcc.Graph(id='defects-graph')
+    ], style={"width": "40%", "display": "inline-block", "verticalAlign": "top"}),
+
+    html.Br(),
+
+    # --------------------------
+    # KPIs
+    # --------------------------
+    html.Div(id="kpi-cards", style={
+        "display": "flex",
+        "justifyContent": "space-around",
+        "marginTop": "20px"
+    }),
+
+    html.Br(),
+
+    # --------------------------
+    # Gráficos
+    # --------------------------
+    html.Div([
+        dcc.Graph(id="grafico-produccion"),
+        dcc.Graph(id="grafico-defectos")
+    ])
 ])
 
-# Callback para actualizar gráficos
-@app.callback(
-    [dcc.Output('units-graph', 'figure'),
-     dcc.Output('defects-graph', 'figure')],
-    [dcc.Input('plant-dropdown', 'value')]
-)
-def update_graphs(selected_plant):
-    filtered_df = df[df['plant_id'] == selected_plant]
-    
-    fig_units = px.line(
-        filtered_df, x='timestamp', y='units_produced', color='line_id',
-        title=f'Units Produced - {selected_plant}'
-    )
-    
-    fig_defects = px.bar(
-        filtered_df, x='timestamp', y='defects', color='line_id',
-        title=f'Defects per Line - {selected_plant}'
-    )
-    
-    return fig_units, fig_defects
+# ============================
+# 4. Callbacks
+# ============================
 
-# Ejecutar app
-if __name__ == '__main__':
+# Filtro + actualización de KPIs y gráficos
+@app.callback(
+    [Output("kpi-cards", "children"),
+     Output("grafico-produccion", "figure"),
+     Output("grafico-defectos", "figure")],
+    [Input("planta-dropdown", "value"),
+     Input("fecha-picker", "start_date"),
+     Input("fecha-picker", "end_date")]
+)
+def update_dashboard(planta, start_date, end_date):
+    # Filtrar datos según planta y rango de fechas
+    dff = df[(df["Planta"] == planta) &
+             (df["Fecha"] >= start_date) &
+             (df["Fecha"] <= end_date)]
+
+    # ============================
+    # KPIs
+    # ============================
+    total_prod = dff["Produccion"].sum()
+    total_def = dff["Defectos"].sum()
+    prom_disp = round(dff["Disponibilidad_%"].mean(), 2)
+
+    kpis = [
+        html.Div([
+            html.H3("Producción Total"),
+            html.P(f"{total_prod:,}")
+        ], style={"border": "1px solid #ccc", "padding": "10px", "borderRadius": "10px", "width": "25%", "textAlign": "center"}),
+
+        html.Div([
+            html.H3("Defectos Totales"),
+            html.P(f"{total_def:,}")
+        ], style={"border": "1px solid #ccc", "padding": "10px", "borderRadius": "10px", "width": "25%", "textAlign": "center"}),
+
+        html.Div([
+            html.H3("Disponibilidad Promedio"),
+            html.P(f"{prom_disp}%")
+        ], style={"border": "1px solid #ccc", "padding": "10px", "borderRadius": "10px", "width": "25%", "textAlign": "center"})
+    ]
+
+    # ============================
+    # Gráfico de Producción
+    # ============================
+    fig_prod = px.line(dff, x="Fecha", y="Produccion", title=f"Producción - {planta}")
+    fig_prod.update_traces(mode="lines+markers")
+
+    # ============================
+    # Gráfico de Defectos
+    # ============================
+    fig_def = px.bar(dff, x="Fecha", y="Defectos", title=f"Defectos - {planta}")
+
+    return kpis, fig_prod, fig_def
+
+
+# ============================
+# 5. Ejecutar servidor
+# ============================
+if __name__ == "__main__":
     app.run_server(debug=True)
