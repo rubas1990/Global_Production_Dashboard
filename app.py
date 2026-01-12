@@ -29,23 +29,54 @@ df_raw.columns = (
 
 print("COLUMNS READ BY PANDAS:", df_raw.columns.tolist())
 
-# Modelo interno
+# ----------------------------
+# Modelo interno (seguro)
+# ----------------------------
+
+required_cols = [
+    "plant_id",
+    "line_id",
+    "timestamp",
+    "units_produced",
+    "defects"
+]
+
+# Validación explícita de columnas
+for col in required_cols:
+    if col not in df_raw.columns:
+        raise ValueError(f"Required column not found in CSV: {col}")
+
+# Construcción del DataFrame con Series reales
 df = pd.DataFrame({
-    "Planta": df_raw.get("plant_id"),
-    "Linea": df_raw.get("line_id"),
-    "Fecha": pd.to_datetime(df_raw.get("timestamp"), errors="coerce"),
-    "Produccion": df_raw.get("units_produced"),
-    "Defectos": df_raw.get("defects"),
+    "Planta": df_raw["plant_id"],
+    "Linea": df_raw["line_id"],
+    "Fecha": pd.to_datetime(df_raw["timestamp"], errors="coerce"),
+    "Produccion": df_raw["units_produced"],
+    "Defectos": df_raw["defects"],
 })
 
+
+
+# ----------------------------
+# Enriquecimiento de datos
+# ----------------------------
+
+# Eliminar filas inválidas
 df = df.dropna(subset=["Planta", "Fecha", "Produccion"])
 
+# Paros simulados (min)
 df["Paros_min"] = (df["Defectos"].fillna(0) * 5).clip(0, 120)
+
+# Disponibilidad simulada (%)
 df["Disponibilidad_%"] = (100 - df["Paros_min"] * 0.5).clip(70, 100)
 
+# Turno derivado
 df["Turno"] = df["Fecha"].dt.hour.apply(
-    lambda h: "Mañana" if 6 <= h < 14 else "Tarde" if 14 <= h < 22 else "Noche"
+    lambda h: "Mañana" if 6 <= h < 14
+    else "Tarde" if 14 <= h < 22
+    else "Noche"
 )
+
 
 # ============================
 # 2. Inicializar la app
