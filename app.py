@@ -6,14 +6,20 @@ from dash.dependencies import Input, Output
 import plotly.express as px
 import os
 # ============================
-# 1. Cargar y normalizar datos (pragmático)
+# 1. Cargar y normalizar datos (estable)
 # ============================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, "data", "production_data.csv")
 
-df_raw = pd.read_csv(DATA_PATH, encoding="utf-8-sig", sep=None, engine="python")
+# Leer CSV (estable)
+df_raw = pd.read_csv(
+    DATA_PATH,
+    encoding="utf-8-sig",
+    sep=","
+)
 
+# Normalizar headers
 df_raw.columns = (
     df_raw.columns
     .str.replace("\ufeff", "", regex=False)
@@ -23,6 +29,7 @@ df_raw.columns = (
 
 print("COLUMNS READ BY PANDAS:", df_raw.columns.tolist())
 
+# Modelo interno
 df = pd.DataFrame({
     "Planta": df_raw.get("plant_id"),
     "Linea": df_raw.get("line_id"),
