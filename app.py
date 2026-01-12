@@ -6,14 +6,46 @@ from dash.dependencies import Input, Output
 import plotly.express as px
 import os
 # ============================
-# 1. Cargar datos (path-safe)
+# 1. Cargar y normalizar datos
 # ============================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, "data", "production_data.csv")
 
-df = pd.read_csv(DATA_PATH, parse_dates=["Fecha"])
+# Leer CSV real
+df_raw = pd.read_csv(DATA_PATH)
 
+# Normalizar nombres de columnas
+df = df_raw.rename(columns={
+    "plant_id": "Planta",
+    "line_id": "Linea",
+    "timestamp": "Fecha",
+    "units_produced": "Produccion",
+    "defects": "Defectos"
+})
+
+# Convertir fecha
+df["Fecha"] = pd.to_datetime(df["Fecha"])
+
+# ----------------------------
+# Enriquecimiento (simulado)
+# ----------------------------
+
+# Paros simulados (minutos)
+df["Paros_min"] = (df["Defectos"] * 5).clip(0, 120)
+
+# Disponibilidad simulada (%)
+df["Disponibilidad_%"] = (100 - df["Paros_min"] * 0.5).clip(70, 100)
+
+# Validación mínima (contrato de datos)
+required_cols = [
+    "Planta", "Fecha", "Produccion",
+    "Defectos", "Paros_min", "Disponibilidad_%"
+]
+
+missing = set(required_cols) - set(df.columns)
+if missing:
+    raise ValueError(f"Missing required columns after normalization: {missing}")
 
 # ============================
 # 2. Inicializar la app
