@@ -6,28 +6,54 @@ from dash.dependencies import Input, Output
 import plotly.express as px
 import os
 # ============================
-# 1. Cargar y normalizar datos (definitivo)
+# 1. Cargar y normalizar datos (ultra-robusto)
 # ============================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, "data", "production_data.csv")
 
-# Leer CSV
-df_raw = pd.read_csv(DATA_PATH)
+# Leer CSV (forzando UTF-8 y separador automático)
+df_raw = pd.read_csv(
+    DATA_PATH,
+    encoding="utf-8-sig",   # elimina BOM si existe
+)
 
-# Normalizar headers (crítico)
-df_raw.columns = df_raw.columns.str.strip().str.lower()
+# Normalizar headers
+df_raw.columns = (
+    df_raw.columns
+    .str.replace("\ufeff", "", regex=False)
+    .str.strip()
+    .str.lower()
+)
 
-# Verificación del esquema de entrada
+# Si todo vino en una sola columna (separador incorrecto)
+if len(df_raw.columns) == 1 and ";" in df_raw.columns[0]:
+    df_raw = pd.read_csv(
+        DATA_PATH,
+        sep=";",
+        encoding="utf-8-sig"
+    )
+    df_raw.columns = (
+        df_raw.columns
+        .str.replace("\ufeff", "", regex=False)
+        .str.strip()
+        .str.lower()
+    )
+
+# Verificación del esquema real
 expected_raw = {"plant_id", "line_id", "timestamp", "units_produced", "defects"}
 missing_raw = expected_raw - set(df_raw.columns)
+
 if missing_raw:
     raise ValueError(
         f"CSV schema mismatch. Missing columns: {missing_raw}. "
         f"Found: {list(df_raw.columns)}"
     )
 
+# ----------------------------
 # Modelo interno canónico
+# ----------------------------
+
 df = pd.DataFrame({
     "Planta": df_raw["plant_id"],
     "Linea": df_raw["line_id"],
@@ -36,34 +62,19 @@ df = pd.DataFrame({
     "Defectos": df_raw["defects"],
 })
 
-# Validar fechas
 if df["Fecha"].isna().any():
     raise ValueError("Some timestamps could not be parsed")
 
 # ----------------------------
-# Enriquecimiento (derivado)
+# Enriquecimiento
 # ----------------------------
 
 df["Paros_min"] = (df["Defectos"] * 5).clip(0, 120)
 df["Disponibilidad_%"] = (100 - df["Paros_min"] * 0.5).clip(70, 100)
 
-# Turno derivado (IMPORTANTE)
 df["Turno"] = df["Fecha"].dt.hour.apply(
     lambda h: "Mañana" if 6 <= h < 14 else "Tarde" if 14 <= h < 22 else "Noche"
 )
-
-# ----------------------------
-# Contrato final
-# ----------------------------
-
-required_cols = {
-    "Planta", "Linea", "Fecha", "Produccion",
-    "Defectos", "Paros_min", "Disponibilidad_%", "Turno"
-}
-
-missing = required_cols - set(df.columns)
-if missing:
-    raise ValueError(f"Internal data contract violated: {missing}")
 
 # ============================
 # 2. Inicializar la app
