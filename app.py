@@ -6,7 +6,7 @@ from dash.dependencies import Input, Output
 import plotly.express as px
 import os
 # ============================
-# 1. Cargar y normalizar datos (estable)
+# 1. Cargar y normalizar datos (estable + robusto)
 # ============================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -27,35 +27,50 @@ df_raw.columns = (
     .str.lower()
 )
 
-print("COLUMNS READ BY PANDAS:", df_raw.columns.tolist())
+print("COLUMNS READ BY PANDAS:")
+for c in df_raw.columns:
+    print(repr(c))
 
 # ----------------------------
-# Modelo interno (seguro)
+# Mapeo de esquema (ROBUSTO)
 # ----------------------------
 
-required_cols = [
-    "plant_id",
-    "line_id",
-    "timestamp",
-    "units_produced",
-    "defects"
-]
+COLUMN_MAP = {
+    "plant_id": ["plant_id", "plant", "planta"],
+    "line_id": ["line_id", "line", "linea"],
+    "timestamp": ["timestamp", "date", "fecha", "time"],
+    "units_produced": ["units_produced", "units", "production", "produccion"],
+    "defects": ["defects", "defectos", "scrap"]
+}
 
-# Validación explícita de columnas
-for col in required_cols:
-    if col not in df_raw.columns:
-        raise ValueError(f"Required column not found in CSV: {col}")
+def resolve_column(possible_names, available_columns):
+    for name in possible_names:
+        if name in available_columns:
+            return name
+    return None
 
-# Construcción del DataFrame con Series reales
+resolved = {}
+
+for logical_name, candidates in COLUMN_MAP.items():
+    col = resolve_column(candidates, df_raw.columns)
+    if not col:
+        raise ValueError(
+            f"Could not resolve column '{logical_name}'. "
+            f"Available columns: {df_raw.columns.tolist()}"
+        )
+    resolved[logical_name] = col
+
+# ----------------------------
+# Modelo interno canónico
+# ----------------------------
+
 df = pd.DataFrame({
-    "Planta": df_raw["plant_id"],
-    "Linea": df_raw["line_id"],
-    "Fecha": pd.to_datetime(df_raw["timestamp"], errors="coerce"),
-    "Produccion": df_raw["units_produced"],
-    "Defectos": df_raw["defects"],
+    "Planta": df_raw[resolved["plant_id"]],
+    "Linea": df_raw[resolved["line_id"]],
+    "Fecha": pd.to_datetime(df_raw[resolved["timestamp"]], errors="coerce"),
+    "Produccion": df_raw[resolved["units_produced"]],
+    "Defectos": df_raw[resolved["defects"]],
 })
-
-
 
 # ----------------------------
 # Enriquecimiento de datos
@@ -76,7 +91,6 @@ df["Turno"] = df["Fecha"].dt.hour.apply(
     else "Tarde" if 14 <= h < 22
     else "Noche"
 )
-
 
 # ============================
 # 2. Inicializar la app
