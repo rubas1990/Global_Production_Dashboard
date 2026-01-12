@@ -12,10 +12,8 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, "data", "production_data.csv")
 
-# Leer CSV de forma tolerante
 df_raw = pd.read_csv(DATA_PATH, encoding="utf-8-sig", sep=None, engine="python")
 
-# Normalizar headers
 df_raw.columns = (
     df_raw.columns
     .str.replace("\ufeff", "", regex=False)
@@ -25,7 +23,6 @@ df_raw.columns = (
 
 print("COLUMNS READ BY PANDAS:", df_raw.columns.tolist())
 
-# Mapear a modelo interno (sin validación bloqueante)
 df = pd.DataFrame({
     "Planta": df_raw.get("plant_id"),
     "Linea": df_raw.get("line_id"),
@@ -34,38 +31,9 @@ df = pd.DataFrame({
     "Defectos": df_raw.get("defects"),
 })
 
-# Eliminar filas inválidas
 df = df.dropna(subset=["Planta", "Fecha", "Produccion"])
 
-# Enriquecimiento
 df["Paros_min"] = (df["Defectos"].fillna(0) * 5).clip(0, 120)
-df["Disponibilidad_%"] = (100 - df["Paros_min"] * 0.5).clip(70, 100)
-
-df["Turno"] = df["Fecha"].dt.hour.apply(
-    lambda h: "Mañana" if 6 <= h < 14 else "Tarde" if 14 <= h < 22 else "Noche"
-)
-
-
-# ----------------------------
-# Modelo interno canónico
-# ----------------------------
-
-df = pd.DataFrame({
-    "Planta": df_raw["plant_id"],
-    "Linea": df_raw["line_id"],
-    "Fecha": pd.to_datetime(df_raw["timestamp"], errors="coerce"),
-    "Produccion": df_raw["units_produced"],
-    "Defectos": df_raw["defects"],
-})
-
-if df["Fecha"].isna().any():
-    raise ValueError("Some timestamps could not be parsed")
-
-# ----------------------------
-# Enriquecimiento
-# ----------------------------
-
-df["Paros_min"] = (df["Defectos"] * 5).clip(0, 120)
 df["Disponibilidad_%"] = (100 - df["Paros_min"] * 0.5).clip(70, 100)
 
 df["Turno"] = df["Fecha"].dt.hour.apply(
