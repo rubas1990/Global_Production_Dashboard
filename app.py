@@ -6,7 +6,7 @@ from dash.dependencies import Input, Output
 import plotly.express as px
 import os
 # ============================
-# 1. Cargar y normalizar datos (robusto)
+# 1. Cargar y normalizar datos (definitivo)
 # ============================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,60 +15,55 @@ DATA_PATH = os.path.join(BASE_DIR, "data", "production_data.csv")
 # Leer CSV
 df_raw = pd.read_csv(DATA_PATH)
 
-# --- Normalizar headers ---
-df_raw.columns = (
-    df_raw.columns
-    .str.strip()        # quitar espacios
-    .str.lower()        # pasar a minúsculas
-)
+# Normalizar headers (crítico)
+df_raw.columns = df_raw.columns.str.strip().str.lower()
 
-# Mapeo canónico de columnas
-COLUMN_MAP = {
-    "plant_id": "Planta",
-    "line_id": "Linea",
-    "timestamp": "Fecha",
-    "units_produced": "Produccion",
-    "defects": "Defectos",
-}
-
-# Ver qué columnas están realmente presentes
-present = set(df_raw.columns)
-expected = set(COLUMN_MAP.keys())
-
-missing_raw = expected - present
+# Verificación del esquema de entrada
+expected_raw = {"plant_id", "line_id", "timestamp", "units_produced", "defects"}
+missing_raw = expected_raw - set(df_raw.columns)
 if missing_raw:
     raise ValueError(
-        f"CSV schema mismatch. Missing columns in raw data: {missing_raw}. "
-        f"Found columns: {list(df_raw.columns)}"
+        f"CSV schema mismatch. Missing columns: {missing_raw}. "
+        f"Found: {list(df_raw.columns)}"
     )
 
-# Renombrar a modelo interno
-df = df_raw.rename(columns=COLUMN_MAP)
+# Modelo interno canónico
+df = pd.DataFrame({
+    "Planta": df_raw["plant_id"],
+    "Linea": df_raw["line_id"],
+    "Fecha": pd.to_datetime(df_raw["timestamp"], errors="coerce"),
+    "Produccion": df_raw["units_produced"],
+    "Defectos": df_raw["defects"],
+})
 
-# --- Tipos ---
-df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
-
+# Validar fechas
 if df["Fecha"].isna().any():
-    raise ValueError("Some timestamps could not be parsed into datetime.")
+    raise ValueError("Some timestamps could not be parsed")
 
-# --- Enriquecimiento ---
+# ----------------------------
+# Enriquecimiento (derivado)
+# ----------------------------
+
 df["Paros_min"] = (df["Defectos"] * 5).clip(0, 120)
 df["Disponibilidad_%"] = (100 - df["Paros_min"] * 0.5).clip(70, 100)
 
-# Turno derivado (industrial)
+# Turno derivado (IMPORTANTE)
 df["Turno"] = df["Fecha"].dt.hour.apply(
     lambda h: "Mañana" if 6 <= h < 14 else "Tarde" if 14 <= h < 22 else "Noche"
 )
 
-# --- Validación final ---
-required_cols = [
+# ----------------------------
+# Contrato final
+# ----------------------------
+
+required_cols = {
     "Planta", "Linea", "Fecha", "Produccion",
     "Defectos", "Paros_min", "Disponibilidad_%", "Turno"
-]
+}
 
-missing = set(required_cols) - set(df.columns)
+missing = required_cols - set(df.columns)
 if missing:
-    raise ValueError(f"Missing required columns after normalization: {missing}")
+    raise ValueError(f"Internal data contract violated: {missing}")
 
 # ============================
 # 2. Inicializar la app
