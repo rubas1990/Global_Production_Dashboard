@@ -3,11 +3,16 @@ import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output
 import plotly.express as px
+import os
+# ============================
+# 1. Cargar datos (path-safe)
+# ============================
 
-# ============================
-# 1. Cargar datos
-# ============================
-df = pd.read_csv("datos_produccion.csv", parse_dates=["Fecha"])
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_PATH = os.path.join(BASE_DIR, "data", "datos_produccion.csv")
+
+df = pd.read_csv(DATA_PATH, parse_dates=["Fecha"])
+
 
 # ============================
 # 2. Inicializar la app
