@@ -6,41 +6,64 @@ from dash.dependencies import Input, Output
 import plotly.express as px
 import os
 # ============================
-# 1. Cargar y normalizar datos
+# 1. Cargar y normalizar datos (robusto)
 # ============================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, "data", "production_data.csv")
 
-# Leer CSV real
+# Leer CSV
 df_raw = pd.read_csv(DATA_PATH)
 
-# Normalizar nombres de columnas
-df = df_raw.rename(columns={
+# --- Normalizar headers ---
+df_raw.columns = (
+    df_raw.columns
+    .str.strip()        # quitar espacios
+    .str.lower()        # pasar a minúsculas
+)
+
+# Mapeo canónico de columnas
+COLUMN_MAP = {
     "plant_id": "Planta",
     "line_id": "Linea",
     "timestamp": "Fecha",
     "units_produced": "Produccion",
-    "defects": "Defectos"
-})
+    "defects": "Defectos",
+}
 
-# Convertir fecha
-df["Fecha"] = pd.to_datetime(df["Fecha"])
+# Ver qué columnas están realmente presentes
+present = set(df_raw.columns)
+expected = set(COLUMN_MAP.keys())
 
-# ----------------------------
-# Enriquecimiento (simulado)
-# ----------------------------
+missing_raw = expected - present
+if missing_raw:
+    raise ValueError(
+        f"CSV schema mismatch. Missing columns in raw data: {missing_raw}. "
+        f"Found columns: {list(df_raw.columns)}"
+    )
 
-# Paros simulados (minutos)
+# Renombrar a modelo interno
+df = df_raw.rename(columns=COLUMN_MAP)
+
+# --- Tipos ---
+df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
+
+if df["Fecha"].isna().any():
+    raise ValueError("Some timestamps could not be parsed into datetime.")
+
+# --- Enriquecimiento ---
 df["Paros_min"] = (df["Defectos"] * 5).clip(0, 120)
-
-# Disponibilidad simulada (%)
 df["Disponibilidad_%"] = (100 - df["Paros_min"] * 0.5).clip(70, 100)
 
-# Validación mínima (contrato de datos)
+# Turno derivado (industrial)
+df["Turno"] = df["Fecha"].dt.hour.apply(
+    lambda h: "Mañana" if 6 <= h < 14 else "Tarde" if 14 <= h < 22 else "Noche"
+)
+
+# --- Validación final ---
 required_cols = [
-    "Planta", "Fecha", "Produccion",
-    "Defectos", "Paros_min", "Disponibilidad_%"
+    "Planta", "Linea", "Fecha", "Produccion",
+    "Defectos", "Paros_min", "Disponibilidad_%", "Turno"
 ]
 
 missing = set(required_cols) - set(df.columns)
